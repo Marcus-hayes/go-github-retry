@@ -75,6 +75,22 @@ func (suite *GithubTestSuite) TestCheckRetryWithBadContext() {
 	assert.Nil(suite.T(), resp)
 }
 
+func (suite *GithubTestSuite) TestCheckRetryWithMaxRedirects() {
+	suite.configureTestServer(false, 100, []int{http.StatusMultipleChoices})
+	ctx := context.Background()
+	_, resp, err := suite.testGithubClient.Users.Get(ctx, "myuser")
+	assert.ErrorContains(suite.T(), err, "300")
+	assert.Equal(suite.T(), resp.StatusCode, http.StatusMultipleChoices)
+}
+
+func (suite *GithubTestSuite) TestCheckRetryWithUnexpectedStatusCode() {
+	suite.configureTestServer(false, 100, []int{http.StatusNotImplemented})
+	ctx := context.Background()
+	_, resp, err := suite.testGithubClient.Users.Get(ctx, "myuser")
+	assert.ErrorContains(suite.T(), err, "501")
+	assert.Equal(suite.T(), resp.StatusCode, http.StatusNotImplemented)
+}
+
 func (suite *GithubTestSuite) configureTestServer(hasRetryAfter bool, remainingRate int, respCodeSlc []int) {
 	mux := http.NewServeMux()
 	i := 0
