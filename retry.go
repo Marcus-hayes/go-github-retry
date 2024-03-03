@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
-	"regexp"
 	"strconv"
 	"time"
 
@@ -14,10 +12,6 @@ import (
 )
 
 var (
-	// A regular expression to match the error returned by net/http when the
-	// configured number of redirects is exhausted. This error isn't typed
-	// specifically so we resort to matching on the error string.
-	redirectsErrorRe     = regexp.MustCompile(`stopped after \d+ redirects\z`)
 	DefaultMinBackoff    = 1 * time.Minute
 	DefaultMaxBackoff    = 8 * time.Minute
 	DefaultRetryAttempts = 3
@@ -31,7 +25,7 @@ func NewClient() *http.Client {
 	rClient.RetryWaitMax = DefaultMaxBackoff
 	rClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
 		if resp != nil {
-			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500 && resp.StatusCode != http.StatusNotImplemented {
+			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500 {
 				// If the Retry-After header is present, sleep that amount of seconds
 				if s, ok := resp.Header["Retry-After"]; ok {
 					if sleep, err := strconv.ParseInt(s[0], 10, 64); err == nil {
@@ -62,13 +56,6 @@ func NewClient() *http.Client {
 			return false, ctx.Err()
 		}
 		if err != nil {
-			if v, ok := err.(*url.Error); ok {
-				// Don't retry if the error was due to too many redirects.
-				if redirectsErrorRe.MatchString(v.Error()) {
-					return false, v
-				}
-			}
-
 			// The error is likely recoverable so retry.
 			return true, nil
 		}
