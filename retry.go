@@ -36,12 +36,14 @@ var (
 
 func NewClient() *http.Client {
 	rClient := retryablehttp.NewClient()
+	// Use the publicly-defined values for retry attempts, starting backoff duration, and max backoff duration
 	rClient.RetryMax = DefaultRetryAttempts
 	rClient.RetryWaitMin = DefaultMinBackoff
 	rClient.RetryWaitMax = DefaultMaxBackoff
 	rClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
 		if resp != nil {
 			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500 {
+				// If the Retry-After header is present, sleep that amount of seconds
 				if s, ok := resp.Header["Retry-After"]; ok {
 					if sleep, err := strconv.ParseInt(s[0], 10, 64); err == nil {
 						return time.Second * time.Duration(sleep)
@@ -49,6 +51,7 @@ func NewClient() *http.Client {
 				}
 				rSlc := resp.Header["X-Ratelimit-Remaining"]
 				remainingRateQuota, _ := strconv.ParseInt(rSlc[0], 10, 64)
+				// If X-Ratelimit-Remaining has reached 0, sleep until it gets reset at the time defined by the X-Ratelimit-Reset header
 				if remainingRateQuota == 0 {
 					quotaResetTimeSlc := resp.Header["X-Ratelimit-Reset"]
 					quotaResetTimeInt, _ := strconv.ParseInt(quotaResetTimeSlc[0], 10, 64)
@@ -94,8 +97,9 @@ func NewClient() *http.Client {
 			return true, nil
 		}
 
-		// 429 Too Many Requests is recoverable. Sometimes the server puts
-		// a Retry-After response header to indicate when the server is
+		// 429 Too Many Requests is recoverable; 403 Forbidden occurs when too many concurrent requests
+		// have been made to the Github server.
+		//  Sometimes the server puts a Retry-After response header to indicate when the server is
 		// available to start processing request from client.
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden {
 			return true, nil

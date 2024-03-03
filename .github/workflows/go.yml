@@ -10,21 +10,50 @@ on:
     branches: [ "main" ]
 
 jobs:
+  coverage:
+    strategy:
+      matrix:
+        go_version: [ 1.22.x ]
 
-  build:
     runs-on: ubuntu-latest
+
     steps:
     - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v3
       with:
-        go-version: '1.20'
-    - name: Install dependencies
+        go-version: ${{ matrix.go_version }}
+    - name: Install gocover-cobertura
       run: |
-        go get .
-    - name: Build
-      run: go build -v ./...
+          go get github.com/boumenot/gocover-cobertura && go install github.com/boumenot/gocover-cobertura
+    - name: Set up gotestfmt
+      uses: GoTestTools/gotestfmt-action@v2
 
-    - name: Test
-      run: go test -v ./...
+    - name: Run tests
+      run: go test -json -race -v -coverprofile=coverage.txt ./... 2>&1 | tee /tmp/gotest.log | gotestfmt
+
+    - name: Convert go coverage to corbetura format
+      run: gocover-cobertura < coverage.txt > coverage.xml
+
+    - name: Generate code coverage report
+      uses: irongut/CodeCoverageSummary@v1.3.0
+      with:
+        filename: coverage.xml
+        badge: false
+        fail_below_min: false
+        format: markdown
+        hide_branch_rate: false
+        hide_complexity: true
+        indicators: true
+        output: both
+        thresholds: '60 80'
+
+    - name: Add Coverage PR Comment
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: github.event_name == 'pull_request'
+      with:
+        recreate: true
+        path: code-coverage-results.md
