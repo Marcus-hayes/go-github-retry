@@ -29,6 +29,8 @@ jobs:
     - name: Install gocover-cobertura
       run: |
           go get github.com/boumenot/gocover-cobertura && go install github.com/boumenot/gocover-cobertura
+          go get github.com/grosser/go-testcov
+
     - name: Set up gotestfmt
       uses: GoTestTools/gotestfmt-action@v2
 
@@ -50,6 +52,10 @@ jobs:
         indicators: true
         output: both
         thresholds: '75'
+    
+    - name: Show uncovered lines
+      run: |
+        go-testcov ./...
 
     - name: Add Coverage PR Comment
       uses: marocchino/sticky-pull-request-comment@v2
