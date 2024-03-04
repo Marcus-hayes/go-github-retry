@@ -2,12 +2,9 @@ package retry
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
-	"regexp"
 	"strconv"
 	"time"
 
@@ -15,20 +12,6 @@ import (
 )
 
 var (
-	// A regular expression to match the error returned by net/http when the
-	// configured number of redirects is exhausted. This error isn't typed
-	// specifically so we resort to matching on the error string.
-	redirectsErrorRe = regexp.MustCompile(`stopped after \d+ redirects\z`)
-
-	// A regular expression to match the error returned by net/http when the
-	// scheme specified in the URL is invalid. This error isn't typed
-	// specifically so we resort to matching on the error string.
-	schemeErrorRe = regexp.MustCompile(`unsupported protocol scheme`)
-
-	// A regular expression to match the error returned by net/http when the
-	// TLS certificate is not trusted. This error isn't typed
-	// specifically so we resort to matching on the error string.
-	notTrustedErrorRe    = regexp.MustCompile(`certificate is not trusted`)
 	DefaultMinBackoff    = 1 * time.Minute
 	DefaultMaxBackoff    = 8 * time.Minute
 	DefaultRetryAttempts = 3
@@ -36,12 +19,14 @@ var (
 
 func NewClient() *http.Client {
 	rClient := retryablehttp.NewClient()
+	// Use the publicly-defined values for retry attempts, starting backoff duration, and max backoff duration
 	rClient.RetryMax = DefaultRetryAttempts
 	rClient.RetryWaitMin = DefaultMinBackoff
 	rClient.RetryWaitMax = DefaultMaxBackoff
 	rClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
 		if resp != nil {
 			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500 {
+				// If the Retry-After header is present, sleep that amount of seconds
 				if s, ok := resp.Header["Retry-After"]; ok {
 					if sleep, err := strconv.ParseInt(s[0], 10, 64); err == nil {
 						return time.Second * time.Duration(sleep)
@@ -49,6 +34,7 @@ func NewClient() *http.Client {
 				}
 				rSlc := resp.Header["X-Ratelimit-Remaining"]
 				remainingRateQuota, _ := strconv.ParseInt(rSlc[0], 10, 64)
+				// If X-Ratelimit-Remaining has reached 0, sleep until it gets reset at the time defined by the X-Ratelimit-Reset header
 				if remainingRateQuota == 0 {
 					quotaResetTimeSlc := resp.Header["X-Ratelimit-Reset"]
 					quotaResetTimeInt, _ := strconv.ParseInt(quotaResetTimeSlc[0], 10, 64)
@@ -70,32 +56,13 @@ func NewClient() *http.Client {
 			return false, ctx.Err()
 		}
 		if err != nil {
-			if v, ok := err.(*url.Error); ok {
-				// Don't retry if the error was due to too many redirects.
-				if redirectsErrorRe.MatchString(v.Error()) {
-					return false, v
-				}
-
-				// Don't retry if the error was due to an invalid protocol scheme.
-				if schemeErrorRe.MatchString(v.Error()) {
-					return false, v
-				}
-
-				// Don't retry if the error was due to TLS cert verification failure.
-				if notTrustedErrorRe.MatchString(v.Error()) {
-					return false, v
-				}
-				if _, ok := v.Err.(x509.UnknownAuthorityError); ok {
-					return false, v
-				}
-			}
-
 			// The error is likely recoverable so retry.
 			return true, nil
 		}
 
-		// 429 Too Many Requests is recoverable. Sometimes the server puts
-		// a Retry-After response header to indicate when the server is
+		// 429 Too Many Requests is recoverable; 403 Forbidden occurs when too many concurrent requests
+		// have been made to the Github server.
+		//  Sometimes the server puts a Retry-After response header to indicate when the server is
 		// available to start processing request from client.
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden {
 			return true, nil
@@ -108,7 +75,6 @@ func NewClient() *http.Client {
 		if resp.StatusCode == 0 || (resp.StatusCode >= 500 && resp.StatusCode != http.StatusNotImplemented) {
 			return true, fmt.Errorf("unexpected HTTP status %s", resp.Status)
 		}
-
 		return false, nil
 	}
 	return rClient.StandardClient()
