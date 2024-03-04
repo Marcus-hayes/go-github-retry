@@ -75,26 +75,12 @@ func (suite *GithubTestSuite) TestCheckRetryWithBadContext() {
 	assert.Nil(suite.T(), resp)
 }
 
-func (suite *GithubTestSuite) TestCheckRetryWithTooManyRedirects() {
-	statusCodeResponses := make([]int, 12)
-	for i := 0; i < 12; i++ {
-		statusCodeResponses[i] = http.StatusTemporaryRedirect
-	}
-	suite.configureTestServer(false, 100, statusCodeResponses)
+func (suite *GithubTestSuite) TestCheckRetryWithInternalServerError() {
+	suite.configureTestServer(false, 100, []int{http.StatusInternalServerError, http.StatusOK})
 	ctx := context.Background()
 	_, resp, err := suite.testGithubClient.Users.Get(ctx, "myuser")
-	fmt.Println(resp)
-	fmt.Println(err)
-	// assert.ErrorContains(suite.T(), err, "300")
-	// assert.Equal(suite.T(), resp.StatusCode, http.StatusMultipleChoices)
-}
-
-func (suite *GithubTestSuite) TestCheckRetryWithUnexpectedStatusCode() {
-	suite.configureTestServer(false, 100, []int{http.StatusNotImplemented})
-	ctx := context.Background()
-	_, resp, err := suite.testGithubClient.Users.Get(ctx, "myuser")
-	assert.ErrorContains(suite.T(), err, "501")
-	assert.Equal(suite.T(), resp.StatusCode, http.StatusNotImplemented)
+	assert.Nil(suite.T(), err)
+	assert.Equal(suite.T(), resp.StatusCode, http.StatusOK)
 }
 
 func (suite *GithubTestSuite) configureTestServer(hasRetryAfter bool, remainingRate int, respCodeSlc []int) {

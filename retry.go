@@ -75,7 +75,6 @@ func NewClient() *http.Client {
 		if resp.StatusCode == 0 || (resp.StatusCode >= 500 && resp.StatusCode != http.StatusNotImplemented) {
 			return true, fmt.Errorf("unexpected HTTP status %s", resp.Status)
 		}
-
 		return false, nil
 	}
 	return rClient.StandardClient()
