@@ -12,17 +12,17 @@ import (
 )
 
 var (
-	DefaultMinBackoff    = 1 * time.Minute
-	DefaultMaxBackoff    = 8 * time.Minute
-	DefaultRetryAttempts = 3
+	defaultMinBackoff    = 1 * time.Minute
+	defaultMaxBackoff    = 8 * time.Minute
+	defaultRetryAttempts = 3
 )
 
 func NewClient() *http.Client {
 	rClient := retryablehttp.NewClient()
 	// Use the publicly-defined values for retry attempts, starting backoff duration, and max backoff duration
-	rClient.RetryMax = DefaultRetryAttempts
-	rClient.RetryWaitMin = DefaultMinBackoff
-	rClient.RetryWaitMax = DefaultMaxBackoff
+	rClient.RetryMax = defaultRetryAttempts
+	rClient.RetryWaitMin = defaultMinBackoff
+	rClient.RetryWaitMax = defaultMaxBackoff
 	rClient.Backoff = func(min, max time.Duration, attemptNum int, resp *http.Response) time.Duration {
 		if resp != nil {
 			if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusForbidden || resp.StatusCode >= 500 {
