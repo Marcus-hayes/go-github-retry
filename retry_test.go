@@ -22,8 +22,8 @@ type GithubTestSuite struct {
 }
 
 func (suite *GithubTestSuite) SetupTest() {
-	DefaultMinBackoff = 250 * time.Millisecond
-	DefaultMaxBackoff = 1 * time.Second
+	defaultMinBackoff = 250 * time.Millisecond
+	defaultMaxBackoff = 1 * time.Second
 }
 
 func (suite *GithubTestSuite) TestBackoffOnRequestErrs() {
@@ -43,14 +43,14 @@ func (suite *GithubTestSuite) TestBackoffOnMaxRequestErrs() {
 }
 
 func (suite *GithubTestSuite) TestBackoffOnRequestErrWithRetryAfterHeader() {
-	suite.configureTestServer(false, 100, []int{http.StatusTooManyRequests, http.StatusOK})
+	suite.configureTestServer(true, 100, []int{http.StatusTooManyRequests, http.StatusOK})
 	ctx := context.Background()
 	_, resp, err := suite.testGithubClient.Users.Get(ctx, "myuser")
 	assert.Nil(suite.T(), err, nil)
 	assert.Equal(suite.T(), resp.StatusCode, http.StatusOK)
 }
 
-func (suite *GithubTestSuite) TestBackoffOnRequestErrWithNoRemainingRateHeader() {
+func (suite *GithubTestSuite) TestBackoffOnRateLimitReset() {
 	suite.configureTestServer(false, 0, []int{http.StatusTooManyRequests, http.StatusOK})
 	ctx := context.Background()
 	_, resp, err := suite.testGithubClient.Users.Get(ctx, "myuser")
